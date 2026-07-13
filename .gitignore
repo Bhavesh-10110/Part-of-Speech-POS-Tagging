@@ -1,0 +1,30 @@
+# Model artifacts
+pos_rnn.keras
+word_tokenizer.pkl
+tag_tokenizer.pkl
+
+# Data files (large)
+ner.csv
+words_pos.csv
+ner_dataset.csv
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Streamlit configurations
+.streamlit/
+
+# OS-generated files
+Thumbs.db
+db.json
+.DS_Store
+
+# IDEs and environments
+.vscode/
+.idea/
+.venv/
+venv/
+env/
