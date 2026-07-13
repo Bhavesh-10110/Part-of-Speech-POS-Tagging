@@ -13,6 +13,7 @@ import pandas as pd
 import streamlit as st
 
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report, confusion_matrix
 
 from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.layers import Embedding, SimpleRNN, Dense, TimeDistributed
@@ -55,6 +56,7 @@ def train_model():
     word_tokenizer.fit_on_texts(sentences)
     X = word_tokenizer.texts_to_sequences(sentences)
 
+    # Save tokenizer
     with open(WORD_TOKENIZER, "wb") as f:
         pickle.dump(word_tokenizer, f)
 
@@ -67,14 +69,18 @@ def train_model():
     for sentence in pos_tags:
         y.append([tag2idx[tag] for tag in sentence])
 
+    # Save tag tokenizer metadata
     with open(TAG_TOKENIZER, "wb") as f:
         pickle.dump({"tag2idx": tag2idx, "idx2tag": idx2tag}, f)
 
+    # Pad sequences
     X = pad_sequences(X, maxlen=MAX_LEN, padding="post", truncating="post")
     y = pad_sequences(y, maxlen=MAX_LEN, padding="post", truncating="post")
 
+    # Categorical targets
     y = to_categorical(y, num_classes=len(unique_tags) + 1)
 
+    # Train test split
     X_train, X_test, y_train, y_test = train_test_split(
         X, y,
         test_size=0.2,
@@ -83,28 +89,35 @@ def train_model():
 
     # Build RNN Model
     model = Sequential()
+
+    # Embedding layer
     model.add(Embedding(
         input_dim=MAX_WORDS,
         output_dim=128,
         input_length=MAX_LEN
     ))
+
+    # Simple RNN Layer (return_sequences=True for many-to-many sequence tagging)
     model.add(SimpleRNN(
         128,
         return_sequences=True
     ))
+
+    # TimeDistributed Output layer
     model.add(TimeDistributed(
         Dense(len(unique_tags) + 1, activation="softmax")
     ))
 
     model.summary()
 
-    # Train
+    # Compile
     model.compile(
         optimizer="adam",
         loss="categorical_crossentropy",
         metrics=["accuracy"]
     )
 
+    # Train
     history = model.fit(
         X_train,
         y_train,
@@ -120,6 +133,29 @@ def train_model():
     loss, accuracy = model.evaluate(X_test, y_test)
     print("\nAccuracy: ", accuracy)
 
+    # Prediction metrics evaluation
+    predictions = model.predict(X_test)
+    pred_classes = np.argmax(predictions, axis=-1)
+    true_classes = np.argmax(y_test, axis=-1)
+
+    # Flatten sequences for evaluation (skipping padding/zero-tag values)
+    flat_pred = []
+    flat_true = []
+    for p_seq, t_seq in zip(pred_classes, true_classes):
+        for p_val, t_val in zip(p_seq, t_seq):
+            if t_val != 0:
+                flat_pred.append(p_val)
+                flat_true.append(t_val)
+
+    unique_val_tags = sorted(list(set(flat_true)))
+    target_names = [idx2tag[i] for i in unique_val_tags]
+
+    print("\nClassification Report:\n")
+    print(classification_report(flat_true, flat_pred, labels=unique_val_tags, target_names=target_names))
+
+    print("\nConfusion Matrix:\n")
+    print(confusion_matrix(flat_true, flat_pred))
+
 
 # Predictions
 
@@ -133,6 +169,7 @@ def predict_pos(sentence):
         tag_data = pickle.load(f)
         idx2tag = tag_data["idx2tag"]
 
+    # Tokenize input text preserving punctuation
     words = re.findall(r"\w+|[^\w\s]", sentence)
     words = words[:MAX_LEN]
 
@@ -183,7 +220,7 @@ if not os.path.exists(MODEL):
 st.title("Part-of-Speech (POS) Tagging using Simple RNN")
 st.write("Many to Many RNN Example")
 
-sentence = st.text_input("Enter a sentence", placeholder="e.g. Barack Obama was born in Hawaii")
+sentence = st.text_input("Enter a sentence", placeholder="Barack Obama was born in Hawaii")
 
 if st.button("Predict"):
     if not sentence.strip():
